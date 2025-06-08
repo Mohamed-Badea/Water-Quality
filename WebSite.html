@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart TDS Water Quality Monitor</title>
+
+  <!-- MQTT client library -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <!-- Chart.js library for graphing -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    /* Base styles for body */
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #e0f7fa, #b2ebf2);
+      color: #fff;
+      text-align: center;
+      overflow-x: hidden;
+      user-select: none;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    /* Main container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* Main heading styling */
+    h1 {
+      color: #0077be;
+      text-shadow: 1px 1px 4px rgba(255,255,255,0.7);
+      margin-bottom: 30px;
+      font-size: 2.5rem;
+    }
+
+    /* Paragraph text color */
+    p {
+      color: #004d70;
+      font-size: 1.2rem;
+    }
+
+    /* Color for TDS value display */
+    #tdsValue {
+      color: #00796b;
+      font-weight: bold;
+      font-size: 1.5rem;
+    }
+
+    /* Status box styles */
+    .safe {
+      background-color: #28a745cc;
+      color: #fff;
+      padding: 15px;
+      border-radius: 12px;
+      margin: 20px auto;
+      width: 150px;
+      font-size: 1.3rem;
+      font-weight: bold;
+      animation: pulseSafe 1.5s ease infinite;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .unsafe {
+      background-color: #dc3545cc;
+      color: #fff;
+      padding: 15px;
+      border-radius: 12px;
+      margin: 20px auto;
+      width: 150px;
+      font-size: 1.3rem;
+      font-weight: bold;
+      animation: pulseUnsafe 1.5s ease infinite;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    /* Animations */
+    .fade-in {
+      opacity: 0;
+      animation: fadeIn 1.5s ease forwards;
+    }
+
+    .slide-in {
+      opacity: 0;
+      transform: translateY(20px);
+      animation: slideIn 1s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
+    @keyframes slideIn {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes pulseSafe {
+      0%, 100% { box-shadow: 0 0 10px #28a74550; }
+      50% { box-shadow: 0 0 20px #28a745aa; }
+    }
+
+    @keyframes pulseUnsafe {
+      0%, 100% { box-shadow: 0 0 10px #dc354550; }
+      50% { box-shadow: 0 0 20px #dc3545aa; }
+    }
+
+    /* Chart container styling */
+    .chart-box {
+      margin: 30px auto;
+      background: rgba(255, 255, 255, 0.8);
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+      border-radius: 15px;
+      max-width: 95%;
+      padding: 15px;
+    }
+
+    /* Info panel */
+    .info-panel {
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 12px;
+      padding: 15px;
+      margin: 20px auto;
+      max-width: 600px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .info-panel h3 {
+      color: #0077be;
+      margin-top: 0;
+    }
+
+    .info-panel p {
+      color: #004d70;
+      text-align: left;
+    }
+
+    /* Wave background */
+    .wave-container {
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+      height: 150px;
+      overflow: hidden;
+      z-index: -1;
+    }
+
+    .waves {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 100px;
+    }
+
+    .waveGroup > use {
+      animation: waveAnimation 25s linear infinite;
+    }
+
+    .waveGroup > use:nth-child(2) {
+      animation-delay: -2s;
+      animation-duration: 20s;
+    }
+
+    .waveGroup > use:nth-child(3) {
+      animation-delay: -4s;
+      animation-duration: 18s;
+    }
+
+    .waveGroup > use:nth-child(4) {
+      animation-delay: -6s;
+      animation-duration: 22s;
+    }
+
+    @keyframes waveAnimation {
+      0% {
+        transform: translateX(0);
+      }
+      100% {
+        transform: translateX(-50%);
+      }
+    }
+
+    /* Message Box Styles */
+    #messageBox {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    #messageContent {
+      background: white;
+      color: #0077be;
+      padding: 30px 50px;
+      border-radius: 15px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+      text-align: center;
+      max-width: 90%;
+    }
+
+    #messageContent p {
+      font-size: 1.5em;
+      margin-bottom: 25px;
+      color: #0077be;
+    }
+
+    #okButton {
+      background-color: #0077be;
+      border: none;
+      color: white;
+      padding: 15px 30px;
+      font-size: 1.2em;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+    #okButton:hover {
+      background-color: #005f8e;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+    }
+
+    #okButton:active {
+      transform: translateY(0);
+    }
+
+    /* Warning overlay styles */
+    #siteWarning {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(220, 53, 69, 0.9);
+      color: white;
+      font-size: 3em;
+      font-weight: bold;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      animation: pulseWarning 0.5s ease-in-out;
+      text-shadow: 0 0 15px #fff, 0 0 20px #dc3545;
+      flex-direction: column;
+    }
+
+    /* Safe water celebration */
+    #safeCelebration {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(40, 167, 69, 0.9);
+      color: white;
+      font-size: 3em;
+      font-weight: bold;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      animation: pulseSafeCelebration 0.5s ease-in-out;
+      text-shadow: 0 0 15px #fff, 0 0 20px #28a745;
+      flex-direction: column;
+    }
+
+    /* TDS Zero Warning */
+    #tdsZeroWarning {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 119, 190, 0.95);
+      color: white;
+      padding: 25px 50px;
+      border-radius: 15px;
+      font-size: 1.8em;
+      font-weight: bold;
+      z-index: 2001;
+      display: none;
+      box-shadow: 0 0 30px rgba(0,0,0,0.6);
+      animation: fadeInOut 0.5s ease-in-out;
+      max-width: 90%;
+      text-align: center;
+    }
+
+    /* Animation keyframes */
+    @keyframes pulseWarning {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes pulseSafeCelebration {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+      100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2rem;
+      }
+      
+      .chart-box {
+        padding: 10px;
+      }
+      
+      #messageContent {
+        padding: 20px;
+      }
+      
+      #messageContent p {
+        font-size: 1.2em;
+      }
+      
+      #okButton {
+        padding: 12px 24px;
+        font-size: 1em;
+      }
+      
+      #siteWarning, #safeCelebration {
+        font-size: 2em;
+      }
+      
+      #tdsZeroWarning {
+        font-size: 1.4em;
+        padding: 15px 30px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      h1 {
+        font-size: 1.8rem;
+      }
+      
+      .info-panel {
+        padding: 10px;
+      }
+      
+      #messageContent {
+        padding: 15px;
+      }
+    }
+
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(0, 119, 190, 0.3);
+      border-radius: 50%;
+      border-top-color: #0077be;
+      animation: spin 1s ease-in-out infinite;
+      margin: 20px auto;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Connection status */
+    #connectionStatus {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 8px 15px;
+      border-radius: 20px;
+      font-size: 0.9em;
+      background: rgba(0,0,0,0.5);
+      color: white;
+      display: flex;
+      align-items: center;
+      z-index: 100;
+    }
+
+    #connectionStatus.connected {
+      background: rgba(40, 167, 69, 0.8);
+    }
+
+    #connectionStatus.disconnected {
+      background: rgba(220, 53, 69, 0.8);
+    }
+
+    #connectionStatus i {
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Main header with fade-in animation -->
+    <h1 class="fade-in"><i class="fas fa-tint"></i> Smart TDS Water Quality Monitor <i class="fas fa-tint"></i></h1>
+    
+    <!-- Current TDS display with slide-in and delay -->
+    <p class="slide-in" style="animation-delay: 0.3s;">
+      Current TDS: <span id="tdsValue">--</span> ppm
+    </p>
+
+    <!-- Status box to show SAFE or UNSAFE with slide-in and delay -->
+    <div id="statusBox" class="slide-in" style="animation-delay: 0.6s;">--</div>
+
+    <!-- Chart container with slide-in animation and delay -->
+    <div class="chart-box slide-in" style="animation-delay: 0.9s;">
+      <canvas id="tdsChart" width="700" height="300"></canvas>
+    </div>
+    
+    <!-- Info panel -->
+    <div class="info-panel slide-in" style="animation-delay: 1.2s;">
+      <h3><i class="fas fa-info-circle"></i> About TDS Levels</h3>
+      <p>
+        <strong>0-50 ppm:</strong> Excellent - Ideal for drinking<br>
+        <strong>50-250 ppm:</strong> Good - Safe for consumption<br>
+        <strong>250-500 ppm:</strong> Fair - May affect taste<br>
+        <strong>500+ ppm:</strong> Poor - Not recommended for drinking
+      </p>
+    </div>
+  </div>
+
+  <!-- Message box will appear here AFTER fade-in finishes -->
+  <div id="messageBox">
+    <div id="messageContent">
+      <p><i class="fas fa-hand-pointer"></i> Press OK To Start Monitoring <i class="fas fa-heart" style="color: #ff4081;"></i></p>
+      <button id="okButton">OK <i class="fas fa-play"></i></button>
+    </div>
+  </div>
+  
+  <!-- TDS Zero Warning Message -->
+  <div id="tdsZeroWarning"><i class="fas fa-exclamation-triangle"></i> Please Put the sensor in water <i class="fas fa-smile"></i></div>
+
+  <!-- Safe water celebration -->
+  <div id="safeCelebration">
+    <div class="celebrationContent">
+      <i class="fas fa-check-circle"></i> Water is Safe to Drink! <i class="fas fa-check-circle"></i>
+    </div>
+  </div>
+
+  <!-- Site-wide warning overlay for unsafe water -->
+  <div id="siteWarning">
+    <div class="warningContent">
+      <i class="fas fa-exclamation-triangle"></i> WARNING: Water is Unsafe! <i class="fas fa-exclamation-triangle"></i>
+    </div>
+  </div>
+
+  <!-- Connection status indicator -->
+  <div id="connectionStatus" class="disconnected">
+    <i class="fas fa-plug"></i> Disconnected
+  </div>
+
+  <!-- Wave background container -->
+  <div class="wave-container">
+    <svg class="waves" xmlns="http://www.w3.org/2000/svg" 
+         xmlns:xlink="http://www.w3.org/1999/xlink"
+         viewBox="0 24 150 28" preserveAspectRatio="none" shape-rendering="auto">
+      <defs>
+        <path id="wavePath" d="M-160 44c30 0 
+          58-18 88-18s 58 18 88 18 
+          58-18 88-18 58 18 88 18 
+          v44h-352z" />
+      </defs>
+      <g class="waveGroup">
+        <use xlink:href="#wavePath" x="48" y="0" fill="rgba(33,150,243,0.7)" />
+        <use xlink:href="#wavePath" x="48" y="3" fill="rgba(33,150,243,0.5)" />
+        <use xlink:href="#wavePath" x="48" y="5" fill="rgba(33,150,243,0.3)" />
+        <use xlink:href="#wavePath" x="48" y="7" fill="#2196f3" />
+      </g>
+    </svg>
+  </div>
+
+  <!-- Audio elements for safe and unsafe alerts -->
+  <audio id="safeAudio" src="safe.mp3" preload="auto"></audio>
+  <audio id="unsafeAudio" src="unsafe.mp3" preload="auto"></audio>
+
+  <script>
+    // Threshold for water safety
+    const safeThreshold = 250;
+    // MQTT topic to subscribe for TDS readings
+    const topic = '/water_quality/tds123';
+    // Maximum data points to show on chart
+    const maxDataPoints = 20;
+
+    // DOM elements
+    const tdsElem = document.getElementById('tdsValue');
+    const statusBox = document.getElementById('statusBox');
+    const messageBox = document.getElementById('messageBox');
+    const okButton = document.getElementById('okButton');
+    const heading = document.querySelector('h1.fade-in');
+    const siteWarning = document.getElementById('siteWarning');
+    const tdsZeroWarning = document.getElementById('tdsZeroWarning');
+    const safeCelebration = document.getElementById('safeCelebration');
+    const connectionStatus = document.getElementById('connectionStatus');
+
+    // Setup Chart.js line chart
+    const ctx = document.getElementById('tdsChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'TDS Value (ppm)',
+          data: [],
+          segment: {
+            borderColor: ctx => ctx.p0.parsed.y < safeThreshold ? '#28a745' : '#dc3545'
+          },
+          pointBackgroundColor: [],
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointRadius: 6,
+          pointHoverRadius: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { 
+            title: { 
+              display: true, 
+              text: 'Time',
+              color: '#004d70',
+              font: {
+                weight: 'bold'
+              }
+            },
+            grid: {
+              color: 'rgba(0,0,0,0.05)'
+            }
+          },
+          y: { 
+            title: { 
+              display: true, 
+              text: 'TDS (ppm)',
+              color: '#004d70',
+              font: {
+                weight: 'bold'
+              }
+            }, 
+            min: 0, 
+            max: 1000,
+            grid: {
+              color: 'rgba(0,0,0,0.05)'
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            labels: {
+              font: {
+                size: 14,
+                weight: 'bold'
+              }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            titleFont: {
+              size: 16,
+              weight: 'bold'
+            },
+            bodyFont: {
+              size: 14
+            },
+            padding: 10,
+            cornerRadius: 10
+          }
+        }
+      }
+    });
+
+    // Keep track of the last status to avoid audio spamming
+    let lastStatus = null;
+    let isTdsZero = false;
+    let tdsZeroTimeout = null;
+    let statusTimeout = null;
+    let checkTdsInterval = null;
+    let isConnected = false;
+
+    /**
+     * Show safe water celebration animation for 2 seconds
+     */
+    function showSafeCelebration() {
+      clearTimeout(statusTimeout);
+      safeCelebration.style.display = 'flex';
+      siteWarning.style.display = 'none';
+      
+      statusTimeout = setTimeout(() => {
+        safeCelebration.style.display = 'none';
+      }, 2000);
+    }
+
+    /**
+     * Show unsafe water warning for 2 seconds
+     */
+    function showUnsafeWarning() {
+      clearTimeout(statusTimeout);
+      siteWarning.style.display = 'flex';
+      safeCelebration.style.display = 'none';
+      
+      statusTimeout = setTimeout(() => {
+        siteWarning.style.display = 'none';
+      }, 2000);
+    }
+
+    /**
+     * Show TDS zero warning for 4 seconds and check again after 10 seconds
+     */
+    /**
+ * Show TDS zero warning for 4 seconds and check again after 10 seconds
+ */
+function showTdsZeroWarning() {
+  // Don't show if already visible
+  if (tdsZeroWarning.style.display === 'block') return;
+  
+  clearTimeout(tdsZeroTimeout);
+  tdsZeroWarning.style.display = 'block';
+  
+  tdsZeroTimeout = setTimeout(() => {
+    tdsZeroWarning.style.display = 'none';
+    
+    // Check again after 10 seconds if still zero
+    setTimeout(() => {
+      if (parseFloat(tdsElem.innerText) === 0) {
+        showTdsZeroWarning();
+      }
+    }, 10000);
+  }, 4000);
+}
+
+    /**
+     * Plays appropriate audio based on water safety status
+     */
+    function speak(text) {
+      if (text === "Water is safe.") {
+        const safeAudio = document.getElementById('safeAudio');
+        safeAudio.pause();
+        safeAudio.currentTime = 0;
+        safeAudio.play().catch(e => console.log("Audio play failed:", e));
+      } else if (text === "Warning, water is not safe.") {
+        const unsafeAudio = document.getElementById('unsafeAudio');
+        unsafeAudio.pause();
+        unsafeAudio.currentTime = 0;
+        unsafeAudio.play().catch(e => console.log("Audio play failed:", e));
+      }
+    }
+
+    /**
+     * Updates chart, status box, TDS display, and warning overlay
+     */
+    function updateChart(tdsValue) {
+      tdsElem.innerText = tdsValue.toFixed(1);
+
+      if (tdsValue === 0) {
+        showTdsZeroWarning();
+        statusBox.className = '';
+        statusBox.innerText = '--';
+        
+        if (lastStatus !== null) {
+          lastStatus = null;
+        }
+        
+        isTdsZero = true;
+        return;
+      } else {
+        tdsZeroWarning.style.display = 'none';
+    clearTimeout(tdsZeroTimeout);
+    isTdsZero = false;
+      }
+
+      const now = new Date().toLocaleTimeString();
+      
+      // Add new data point
+      chart.data.labels.push(now);
+      chart.data.datasets[0].data.push(tdsValue);
+      
+      // Limit the number of data points to show
+      if (chart.data.labels.length > maxDataPoints) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+        chart.data.datasets[0].pointBackgroundColor.shift();
+      }
+      
+      // Set point color based on safety
+      const color = tdsValue < safeThreshold ? '#28a745' : '#dc3545';
+      chart.data.datasets[0].pointBackgroundColor.push(color);
+
+      if (tdsValue < safeThreshold) {
+        statusBox.className = 'safe';
+        statusBox.innerHTML = '<i class="fas fa-check"></i> SAFE';
+
+        if (lastStatus !== 'safe') {
+          speak("Water is safe.");
+          showSafeCelebration();
+          lastStatus = 'safe';
+        }
+      } else {
+        statusBox.className = 'unsafe';
+        statusBox.innerHTML = '<i class="fas fa-exclamation-triangle"></i> UNSAFE';
+
+        if (lastStatus !== 'unsafe') {
+          speak("Warning, water is not safe.");
+          showUnsafeWarning();
+          lastStatus = 'unsafe';
+        }
+      }
+
+      chart.update();
+    }
+
+    // MQTT client variable
+    let client = null;
+
+    /**
+     * Update connection status UI
+     */
+    function updateConnectionStatus(connected) {
+      isConnected = connected;
+      if (connected) {
+        connectionStatus.className = 'connected';
+        connectionStatus.innerHTML = '<i class="fas fa-plug"></i> Connected';
+      } else {
+        connectionStatus.className = 'disconnected';
+        connectionStatus.innerHTML = '<i class="fas fa-plug"></i> Disconnected';
+      }
+    }
+
+    /**
+     * Unlock audio & MQTT connection
+     */
+    function unlockAudioAndConnect() {
+      messageBox.style.display = 'none';
+      
+      // Show loading state
+      connectionStatus.innerHTML = '<div class="spinner"></div> Connecting...';
+      
+      // Connect to MQTT broker
+      client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+        clientId: 'tds_monitor_' + Math.random().toString(16).substr(2, 8),
+        clean: true,
+        reconnectPeriod: 1000,
+        connectTimeout: 30000
+      });
+
+      client.on('connect', () => {
+        console.log('Connected to MQTT broker');
+        updateConnectionStatus(true);
+        client.subscribe(topic, { qos: 1 }, (err) => {
+          if (err) {
+            console.error('Subscription error:', err);
+          }
+        });
+      });
+
+      client.on('message', (topic, message) => {
+        const tdsValue = parseFloat(message.toString());
+        if (!isNaN(tdsValue)) {
+          updateChart(tdsValue);
+        }
+      });
+
+      client.on('reconnect', () => {
+        console.log('Reconnecting to MQTT broker...');
+        updateConnectionStatus(false);
+      });
+
+      client.on('offline', () => {
+        console.log('Disconnected from MQTT broker');
+        updateConnectionStatus(false);
+      });
+
+      client.on('error', (err) => {
+        console.error('MQTT error:', err);
+        updateConnectionStatus(false);
+      });
+    }
+
+    // Event listeners
+    okButton.addEventListener('click', unlockAudioAndConnect);
+
+    // Initial animations
+    setTimeout(() => {
+      heading.style.animationPlayState = 'running';
+      messageBox.style.display = 'flex';
+    }, 1500);
+
+    // Simulate data for demo purposes (remove in production)
+    function simulateData() {
+      if (!isConnected) {
+        const simulatedTds = Math.random() > 0.5 ? 
+          Math.floor(Math.random() * 200) : // Safe range
+          Math.floor(250 + Math.random() * 500); // Unsafe range
+        
+        updateChart(simulatedTds);
+      }
+    }
+
+    // Uncomment for demo mode
+    // setInterval(simulateData, 3000);
+  </script>
+</body>
+</html>
